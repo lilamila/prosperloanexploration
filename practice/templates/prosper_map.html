@@ -1,0 +1,131 @@
+<!-- http://bl.ocks.org/mbostock/4060606 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Leaf's Visualizations</title>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Marie's place to visualize data.">
+    <meta name="author" content="Marie Leaf">
+
+<!--     <link rel="stylesheet" href="css/bootstrap.min.css"> -->
+    <script src="http://d3js.org/d3.v3.min.js"></script>
+    <script src="//d3js.org/queue.v1.min.js"></script>
+    <script src="//d3js.org/topojson.v1.min.js"></script>
+    <link href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet' type='text/
+    css'>
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="/../static/css/styles.css" />
+  <style>
+
+  .states {
+    fill: none;
+    stroke: #fff;
+    stroke-linejoin: round;
+  }
+
+  div.buttons {
+      position: fixed;
+      top: 5px;
+      left: 50px;
+  }
+
+  div.buttons div {
+      background-color: rgb(250,88,88);
+      padding: 3px;
+      margin: 7px;
+  }
+  </style>
+  <script type="text/javascript">  
+
+      function draw(geo_data) {
+        "use strict";
+
+        var margin = 75,
+            width = 2400 - margin,
+            height = 1150 - margin;
+
+        var color = d3.scale.threshold()
+            .domain([0.02, 0.04, 0.06, 0.08, 0.10])
+            .range(["#f2f0f7", "#dadaeb", "#bcbddc", "#9e9ac8", "#756bb1", "#54278f"]);
+
+        // dataframe to pull: "BorrowerState", "CreditScoreRangeLower","CreditScoreRangeUpper", "CurrentCreditLines","OpenCreditLines","TotalCreditLinespast7years"
+
+        d3.select("body")
+          .append("h2")
+          .text("Prosper Loans");
+
+        var svg = d3.select("body")
+            .append("svg")
+            .attr("width", width + margin)
+            .attr("height", height + margin)
+            .append('g')
+            .attr('class', 'map');
+
+
+
+        var projection = d3.geo.mercator()
+                               .scale(1000)
+                               .translate([width / 1, height / 1]);
+
+
+        var path = d3.geo.path().projection(projection);
+
+
+        var map = svg.selectAll('path')
+                     .data(geo_data.features)
+                     .enter()
+                     .append('path')
+                     .attr('d', path)
+                     .style('fill', 'lightBlue')
+                     .style('stroke', 'black')
+                     .style('stroke-width', 0.5);
+};
+
+// ------- TODO : Remove Alaska --------------------
+// if geo_data.properties.name == "Alaska" 
+// geo_data.features..exit().remove();
+        // var alaska_projection = d3.geo.mercator()
+        //                        .scale(200)
+        //                        .translate([width / 1.2, height / 1.2]);
+
+      //plot_points function takes in just credit data defined in the d3.csv loading function
+        function plot_points(creditdata) {
+        debugger;
+
+        var rateByCredit = {};
+
+        creditdata.forEach(function(d) {rateByCredit[d.id] = +d.rate; });
+
+        svg.append("g")
+           .attr("class", "states")
+           .selectAll("path")
+           .data(geo_data.features)
+           .enter()
+           .append("path")
+           .attr("d", path)
+           .style("fill", function(d) { return color(rateById[d.id]); });
+
+        }
+
+
+        d3.csv("http://localhost:8000/data/prosperLoanData.csv", function(d) {
+            d['creditScoreAvg'] = +((d['CreditScoreRangeLower']+ d["CreditScoreRangeUpper"])/2);
+            return d;
+          }, plot_points);
+    </script>
+  </head>
+<body>
+  <script type="text/javascript">
+    /*
+      Use D3 to load the GeoJSON file
+      */
+
+  d3.json("http://localhost:8000/data/us.json", draw);
+
+
+  </script>
+</body>
+</html>

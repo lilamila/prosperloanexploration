@@ -1,0 +1,564 @@
+<!-- http://bl.ocks.org/mbostock/4060606 -->
+<!-- view-source:https://bost.ocks.org/mike/loans/ -->
+<!-- TODO: REFACTOR 'cat' TO CATEGORY? -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Leaf's Visualizations</title>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Marie's place to visualize data.">
+    <meta name="author" content="Marie Leaf">
+
+<!--     <link rel="stylesheet" href="css/bootstrap.min.css"> -->
+    <link href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet' type='text/
+    css'>
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="/../static/css/styles.css" />
+  <!-- Scripts -->
+    <script src="//d3js.org/d3.v3.min.js"></script>
+    <script src="//d3js.org/queue.v1.min.js"></script>
+    <script src="/../static/js/jquery.min.js"></script>
+    <script src="/../static/js/skel.min.js"></script>
+    <script src="/../static/js/util.js"></script>
+    <script src="/../static/js/main.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+    <script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
+  </head>
+
+<style>
+
+
+/*.chart rect {
+  fill: #56C9CC;
+}
+
+.chart text {
+  fill: white;
+  font: 10px sans-serif;
+  text-anchor: end;
+}*/
+
+.chart {
+  margin-left: -40px;
+  height: 506px;
+}
+
+text {
+  font: 10px sans-serif;
+}
+
+.dot {
+  stroke: #000;
+}
+
+.axis path, .axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.label {
+  fill: #777;
+}
+
+.cat.label {
+  font: 500 196px "Helvetica Neue";
+  fill: #ddd;
+}
+
+.cat.label.active {
+  fill: #aaa;
+}
+
+.overlay {
+  fill: none;
+  pointer-events: all;
+  cursor: ew-resize;
+}
+</style>
+<body>
+  <section id="banner">
+    <h2>Visualizing Prosper Loans <strong>Lender Dashboard</strong></h2>
+  </section>
+  <section id="one" class="wrapper special">
+    <div class="inner">
+      <script>
+
+    function draw(d){
+      // debugger;
+      // return console.table(data.slice[0,10]);
+      // Chart dimensions. Create Chart.
+      var margin = {top: 19.5, right: 19.5, bottom: 25.5, left: 42.5},
+          width = 1000 - margin.right - margin.left,
+          height = 500 - margin.top - margin.bottom;
+
+      var chart = d3.select(".chart")
+            .attr("width", width)
+            .attr("height", height);
+
+      // Various accessors that specify the four dimensions of data to visualize.
+      function x(d) { return d.ProsperScore } //or bad-good credit
+      function y(d) { return d.MonthlyLoanPayment; } //or d.InterestRate
+      function radius(d) { return d.ProsperPrincipalOutstanding; }
+      function color(d) { return d.LoanStatus; }  //ensure the chart can handle categorical
+      function key(d) { return d.ListingKey; }
+      function year_stripped(d) {return d.ListingCreationDate.getUTCFullYear();}
+            // year: format.parse(d.Year),
+      // var format = d3.time.format("%Y");
+      // function year_stripped(d) {return format.parse(d.ListingCreationDate).getYear();}
+
+      // Data scales. These domains make assumptions of data, naturally.
+      var xScale = d3.scale.linear().domain([0, 12]).range([0, width]),
+          // yScale = d3.scale.linear().domain([0, d3.max(data, function(d) {return d.value;})]).range([height, 0]),
+          yScale = d3.scale.linear().domain([0, 900]).nice().range([height, 0]), // .nice() makes axis end in round number
+          // yScale = d3.scale.linear().domain(extent(y(d)).range([height, 0]),
+          radiusScale = d3.scale.sqrt().domain([0, 19000]).range([0, 20]),
+          // colorScale = d3.scale.category10();
+          colorScale = d3.scale.ordinal().domain(['Current', 'Completed','Past Due (1-15 days)','Past Due (16-30 days)', 'Chargedoff']).range(["#FFD07B", "white", "#FD7A87", "#FA2F43", "#F8031A"]);
+
+
+//   var x = d3.scale.linear().range([0, width]);
+
+//   var chart = d3.select(".chart").attr("width", width);
+
+//   x.domain([0, d3.max(data, function(d) { return d.value; })]);
+
+//   chart.attr("height", height * data.length);
+
+//   var bar = chart.selectAll("g")
+//       .data(data)
+//     .enter().append("g")
+//       .attr("transform", function(d, i) { return "translate(0," + i * barHeight + ")"; });
+
+//   bar.append("rect")
+//       .attr("width", function(d) { return x(d.value); })
+//       .attr("height", barHeight - 1);
+
+//   bar.append("text")
+//       .attr("x", function(d) { return x(d.value) - 3; })
+//       .attr("y", barHeight / 2)
+//       .attr("dy", ".35em")
+//       .text(function(d) { return d.value; });
+// }
+
+
+
+// Add the cat label; the value is set on transition.
+var label = svg.append("text")
+    .attr("class", "cat label")
+    .attr("text-anchor", "end")
+    .attr("y", height - 24)
+    .attr("x", width)
+    .text(1);
+
+// Load the data.
+d3.json("http://localhost:8000/data/prosperloandata_sample.json", function(loans) {
+  // A bisector since many loan's data is sparsely-defined.
+  var bisect = d3.bisector(function(d) { return d[0]; });
+
+  // Add a dot per loan. Initialize the data at [month?], and set the colors.
+  var dot = svg.append("g")
+      .attr("class", "dots")
+    .selectAll(".dot")
+      .data(interpolateData(1))
+    .enter().append("circle")
+      .attr("class", "dot")
+      .style("fill", function(d) { return colorScale(color(d)); })
+      .call(position)
+      .sort(order);
+
+  // Add a title.
+  dot.append("title")
+      .text(function(d) { return d.ListingKey; });
+
+  // Add an overlay for the cat label.
+  var box = label.node().getBBox();
+
+  var overlay = svg.append("rect")
+        .attr("class", "overlay")
+        .attr("x", box.x)
+        .attr("y", box.y)
+        .attr("width", box.width)
+        .attr("height", box.height)
+        .on("mouseover", enableInteraction);
+
+// Start a transition that interpolates the data based on cat.
+  svg.transition()
+      .duration(30000)
+      .ease("linear")
+      .tween("cat", tweencat)
+      .each("end", enableInteraction);
+
+  // Positions the dots based on data.
+  function position(dot) {
+    dot .attr("cx", function(d) { return xScale(x(d)); })
+        .attr("cy", function(d) { return yScale(y(d)); })
+        .attr("r", function(d) { return radiusScale(radius(d)); });
+  }
+
+  // Defines a sort order so that the smallest dots are drawn on top.
+  function order(a, b) {
+    return radius(b) - radius(a);
+  }
+
+  // After the transition finishes, you can mouseover to change the cat.
+  function enableInteraction() {
+    var catScale = d3.scale.linear()
+        .domain([1, 20])
+        .range([box.x + 10, box.x + box.width - 10])
+        .clamp(true);
+
+    // Cancel the current transition, if any.
+    svg.transition().duration(0);
+
+    overlay
+        .on("mouseover", mouseover)
+        .on("mouseout", mouseout)
+        .on("mousemove", mousemove)
+        .on("touchmove", mousemove);
+
+    function mouseover() {
+      label.classed("active", true);
+    }
+
+    function mouseout() {
+      label.classed("active", false);
+    }
+
+    function mousemove() {
+      displaycat(catScale.invert(d3.mouse(this)[0]));
+    }
+  }
+
+  // Tweens the entire chart by first tweening the cat, and then the data.
+  // For the interpolated data, the dots and label are redrawn.
+  function tweencat() {
+    var cat = d3.interpolateNumber(1, 20);
+    return function(t) { displaycat(cat(t)); };
+  }
+
+  // Updates the display to show the specified cat.
+  function displaycat(cat) {
+    dot.data(interpolateData(cat), key).call(position).sort(order);
+    label.text(Math.round(cat));
+  }
+
+  // Interpolates the dataset for the given (fractional) category.
+  function interpolateData(cat) {
+    return loans.map(function(d) {
+      return {
+        ListingKey: d.ListingKey,
+        ProsperScore: d.ProsperScore,
+        LoanStatus: interpolateValues(d.LoanStatus, cat),
+        ProsperPrincipleOutstanding: interpolateValues(d.ProsperPrincipalOutstanding, cat),
+        MonthlyLoanPayment: interpolateValues(d.MonthlyLoanPayment, cat)
+      };
+    });
+  }
+
+  // Finds (and possibly interpolates) the value for the specified cat.
+  function interpolateValues(values, cat) {
+    var i = bisect.left(values, cat, 0, values.length - 1),
+        a = values[i];
+    if (i > 0) {
+      var b = values[i - 1],
+          t = (cat - a[0]) / (b[0] - a[0]);
+      return a[1] * (1 - t) + b[1] * t;
+    }
+    return a[1];
+  }
+});
+
+
+              // Create a subset of the data to be used to draw scatter points
+              var data_subset = [];
+              
+              for (var i = 0; i < d.length; i++) {
+                  var new_elem = {
+                      
+                      "ListingKey": d[i]["ListingKey"],
+                      "Year": d[i]["Year"],
+                      "ProsperScore": d[i]["ProsperScore"],
+                      "LoanStatus": d[i]["LoanStatus"],
+                      "ProsperPrincipalOutstanding": d[i]["ProsperPrincipalOutstanding"],
+                      "MonthlyLoanPayment": d[i]["MonthlyLoanPayment"]
+        
+                  };
+                  //Only going to add the data points for the selected year to the stage
+                  if (d.Year == 2010) {
+                      data_subset.push(new_elem);
+                  }
+                } //end of for loop (new_elem)
+              console.log(data_subset)
+
+
+
+
+                            // Create a subset of the data to be used to draw scatter points
+              var data_subset = [];
+              
+              for (var i = 0; i < d.length; i++) {
+                  var new_elem = {
+                      
+                      // "ListingKey": i.ListingKey,
+                      // "Year": i.Year,
+                      // "ProsperScore": i.ProsperScore,
+                      // "LoanStatus": i.LoanStatus,
+                      // "ProsperPrincipalOutstanding": i.ProsperPrincipalOutstanding,
+                      // "MonthlyLoanPayment": i.MonthlyLoanPayment
+
+                      "ListingKey": d[i]["ListingKey"],
+                      "ListingYear": d[i]["ListingYear"],
+                      "ProsperScore": d[i]["ProsperScore"],
+                      "LoanStatus": d[i]["LoanStatus"],
+                      "ProsperPrincipalOutstanding": d[i]["ProsperPrincipalOutstanding"],
+                      "MonthlyLoanPayment": d[i]["MonthlyLoanPayment"]
+
+                  };
+
+                  //Only going to add the data points for the selected year to the stage
+                  if (d[i]["ListingYear"] == "Sun May 08 2016 13:30:34 GMT-0400 (EDT)") {
+                      data_subset.push(new_elem);
+                  }
+
+                } //end of for loop (new_elem)
+              console.log(data_subset)
+
+function agg_year(leaves) {
+                var total = d3.sum(leaves, function(d) {
+                    return d['attendance'];
+                });
+
+                var coords = leaves.map(function(d) {
+                    return projection([+d.long, +d.lat]);
+                });
+
+                var center_x = d3.mean(coords, function(d) {
+                    return d[0];
+                });
+
+                var center_y = d3.mean(coords, function(d) {
+                    return d[1];
+                });
+
+                var loans = d3.set();
+
+                leaves.forEach(function(d) {
+                    loans.add(d['ListingKey']);
+                    loans.add(d['LoanStatus']);
+                    loans.add(d['ProsperPrincipleOutstanding']);
+                    loans.add(d['MonthlyLoanPayment']);
+                    loans.add(d['ProsperScore']);
+                });
+
+                return {
+                  'attendance' : total,
+                  'x' : center_x,
+                  'y' : center_y,
+                  'loans' : loans.values()
+                };
+            }
+
+            var nested = d3.nest()
+                           .key(function(d) { //accessor call back is variable the nesting groups by
+                              return d['ListingCreationDate'].getUTCFullYear();
+                           })
+                           .rollup(agg_year) // aggregates, gets passed 'leaves', or nested/hierarchical set of data, organized by group we previously specified
+                           .entries(data); // passes data through nest pipeline
+
+
+            function update(year){
+              // console.log(years_stripped(d))
+              var filtered = d.filter( //different iterations:
+              //   // data.ListingYear === year;)
+                function(d){
+                  return year_stripped(d) == year;
+              //     // parseDate(String(d.ListingCreationDate)) === year;
+              //   //   // return year_stripped === year;
+              //   //   return data[d].ListingYear === year;
+              //   //   // new Date(d['ListingCreationDate']).getUTCFullYear() === year;
+                  });
+
+                  // d3.select('section#one')
+                  //   .select('h2')
+                  //   .text("Prosper Loans " + year);
+
+              // if current year is undefined, set it to 2014
+              // current_year = current_year || 2014;
+
+              var loans = svg.selectAll('circle')
+                             // .data(d);
+                             .data(filtered);                             
+                             // .data(filtered, key);
+              debugger;
+              loans.exit().remove();
+              debugger;
+              loans.enter()
+                   .append("circle")
+                   .filter(function(d) { return year_stripped(d) == year; })
+                    // / .filter(function(d) { return d.ListingYear == year; })
+                     .style("fill", function(d) { return colorScale(color(d)); })
+                       .attr('stroke', 'black')
+                       .attr('stroke-width', 0.7)
+                       .attr('opacity', 0.7)
+                     .transition()
+                     .duration(500)
+                     .call(position)
+                     .sort(order);
+
+                   } //end of function update(year)
+            
+              update(2010);
+
+
+// loan size legend
+      // svg.append("g")
+      //   .attr("class", "legendSize")
+      //   .attr("transform", "translate(20, 40)");
+
+      // var legendSize = d3.legend.size()
+      //   .scale(radiusScale)
+      //   .shape('circle')
+      //   .shapePadding(15)
+      //   .labelOffset(20)
+      //   .orient('horizontal');
+
+      // svg.select(".legendSize")
+      //   .call(legendSize);
+
+          // var dot = svg.append('g')
+          //      .attr("class", "bubble")
+          //      .selectAll("circle")
+          //      .data(nested.sort(function(a, b) { 
+          //         return b.values['EstimatedReturn'] - a.values['EstimatedReturn'];
+          //      }), key_func)
+          //      .enter()
+          //      .append("circle")
+          //      .attr('cx', function(d) { return d.values['x']; })
+          //      .attr('cy', function(d) { return d.values['y']; })
+          //      .attr('r', function(d) {
+          //           return radius(d.values['EstimatedReturn']);
+          //      })
+          //      .attr('stroke', 'black')
+
+      // var diameter = 960,
+      //     format = d3.format(",d"),
+      //     color = d3.scale.category20c();
+
+      // var bubble = d3.layout.pack()
+      //     .sort(null)
+      //     .size([diameter, diameter])
+      //     .padding(1.5);
+
+      // var svg = d3.select("body").append("svg")
+      //     .attr("width", diameter)
+      //     .attr("height", diameter)
+      //     .attr("class", "bubble");
+
+      // function draw(data) {
+      //   var width = 620,
+      //   barHeight = 30;
+
+      //   var x = d3.scale.linear()
+      //     .range([0, width]);
+
+      //   var chart = d3.select(".chart")
+      //       .attr("width", width);
+
+      //   x.domain([0, d3.max(data, function(d) { return d.value; })]);
+
+      //   chart.attr("height", barHeight * data.length);
+
+      //   var bar = chart.selectAll("g")
+      //       .data(data)
+      //     .enter().append("g")
+      //       .attr("transform", function(d, i) { return "translate(0," + i * barHeight + ")"; });
+
+      //   bar.append("rect")
+      //       .attr("width", function(d) { return x(d.value); })
+      //       .attr("height", barHeight - 1);
+
+      //   bar.append("text")
+      //       .attr("x", function(d) { return x(d.value) - 3; })
+      //       .attr("y", barHeight / 2)
+      //       .attr("dy", ".35em")
+      //       .text(function(d) { return d.value; });
+
+    </script>
+<!--     <div class="media">
+      <svg class="chart"></svg>
+      <script type="text/javascript">
+
+        function type(d) {
+          d.value = +d.value; // coerce to number
+          return d;
+        }
+        // d3.csv("http://localhost:8000/data/prosperLoanData.csv", type, draw);
+        // d3.tsv("http://localhost:8000/data/prosperloandata_sample", type, draw);
+      </script>
+    </div> -->
+  </section>
+</div>
+
+<!-- Body -->
+<body>
+  <section id="banner">
+    <h2>Visualizing Prosper Loans <strong>Lender Dashboard</strong></h2>
+  </section>
+  <section id="one" class="wrapper special">
+    <h2>Prosper Loans</h2>
+    <div class = "container">
+    <div class="inner">
+    <div class="row">
+    <div class = "col-md-push-4">
+    <p>Filter year</p>
+    </div>
+    <div class="col-md-8">
+      <svg class="chart"></svg>
+      <script type="text/javascript">
+      // draw chart
+      // "2007-08-26 19:09:29.263000000"
+      format = d3.time.format("%m/%d/%y").parse;
+      // format = d3.time.format("%Y-%m-%d %X %L");
+      // format = d3.time.format("%Y-%m-%d %X%L000000");
+    /*
+     * Use D3 to load CSV file and use `draw` callback
+     */
+      d3.csv("http://localhost:8000/data/prosperLoanData.csv", function(d) {
+      // d3.csv("http://localhost:8000/prosperloandata_sample.csv", function(d) {
+
+        // d["ListingCreationDate"]= format.parse(d["ListingCreationDate"]);
+        // d["ListingKey"] = d["ListingKey"] 
+        // d["ProsperScore"] = + d["ProsperScore"]
+        // return d;
+
+        return {
+          ListingKey: d.ListingKey,
+          ListingCreationDate: new Date(d.ListingCreationDate),
+          ListingCreationDate_nonobject: d.ListingCreationDate, 
+          ListingCreationDate_2: format(d.ListingCreationDate),
+          ProsperScore: + d.ProsperScore,
+          LoanStatus: d.LoanStatus,
+          ProsperPrincipalOutstanding: + d.ProsperPrincipalOutstanding,
+          MonthlyLoanPayment: + d.MonthlyLoanPayment
+          // EstimatedReturn: +d.EstimatedReturn
+        };
+
+      }, function(error, data) {
+        console.log(error);
+        draw(data);
+      });
+
+      </script>
+  <!-- Footer -->
+  <footer id="footer">
+    <div class="copyright">
+      <p>Brought to you by Leafer &copy; <a href="{{url_for('source')}}" class="icon fa-github text-muted"> Fork on Github</a></p>
+    </div>
+  </footer>
+
+</body>
+</html>

@@ -1,0 +1,927 @@
+Prosper Loan Data by Marie Leaf
+========================================================
+# Introduction
+An exploratory data analysis (EDA) is performed on the
+[Prosper](https://en.wikipedia.org/wiki/Prosper_Marketplace#Loan_performance_prior_to_July_2009)
+lending data. I am curious to learn more about the dynamics of P2P loans, as they emerge as a financial product in the American economy, and perhaps how they may develop as instruments supporting the Title III of the Jobs Act (which permits companies to offer and sell securities through [crowdfunding](https://www.seedinvest.com/blog/jobs-act/sec-issues-final-rules-for-title-iii-equity-crowdfunding)). I am ultimately curious about how distributed systems (built with blockchain) may develop a (perhaps autonomous with Ethereum) P2P lending platform...but this is beyond the scope of this EDA.
+
+While I use various techniques to scan over a swath of different variables, I focus on loans' listing categories, status, estimated return to lenders, and the Prosper rating, which provides a measure of loan risk.
+
+I think loan status is an interesting variable to understand to potentially build something like a lender dashboard, to see loans outstanding and segment their outstanding loans by risk score, to better know which loans to focus on. 
+
+I think listing categories are an interesting variable to explore as loan use is a very important factor in understanding the sustainability and dynamics of the marketplace - are these loans that foster revenue generation for it's borrowers, are they consumer product loans?
+Will these loans be affected by Title III of the jobs act? Should Prosper be focused on growing a certain sector of loans? 
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# Load all of the packages used in analysis
+# "echo" prevents the code from displaying in the knitted HTML output.
+# You should set echo=FALSE for all code chunks in your file.
+
+# install.packages('lubridate')
+# install.packages('corrplot')
+# install.packages('tseries')
+# install.packages('gridExtra', dependencies = T)
+# install.packages("ggplot2", dependencies = T) 
+# install.packages("knitr", dependencies = T)
+# install.packages("dplyr", dependencies = T)
+# install.packages("formatR", repos = "http://cran.rstudio.com")
+# install.packages('devtools')
+# install.packages('scales')
+# install.packages('memisc')
+# install.packages("proto", dependencies = T)
+# install.packages('rjson')
+library(formatR)
+library(ggplot2)
+library(devtools)
+library(dplyr)
+library(GGally)
+library(scales)
+library(memisc)
+library(reshape2)
+library(gridExtra)
+library(RColorBrewer)
+library(lubridate)
+library(corrplot)
+
+```
+
+```{r echo=FALSE, Load_the_Data}
+# Load the Data
+getwd()
+setwd('/Users/marieleaf/CODE/datanano/P4_explore_analyze/data/')
+loansFull <- read.csv('prosperLoanData.csv')
+# str(loansFull)
+# names(loansFull)
+```
+
+### Clean up the data a bit
+Factor key ordered factor variables that exist as integers (Term, ListingCategory)
+
+```{r}
+loans <- subset(loansFull, select=c("ListingNumber",
+                            "Term", 
+                            "EstimatedReturn", 
+                            "ListingCategory..numeric.",
+                            "ProsperRating..numeric.",
+                            "MonthlyLoanPayment",
+                            "ProsperScore",
+                            "EstimatedEffectiveYield",
+                            "BankcardUtilization",
+                            "TotalProsperLoans",
+                            "AmountDelinquent",
+                            "StatedMonthlyIncome",
+                            "DebtToIncomeRatio",
+                            "EmploymentStatusDuration",
+                            "CreditScoreRangeLower",
+                            "CreditScoreRangeUpper",
+                            "CurrentCreditLines",
+                            "BorrowerState",
+                            "Occupation",
+                            "EmploymentStatus",
+                            "IsBorrowerHomeowner",
+                            "IncomeRange",
+                            "IncomeVerifiable",
+                            "BorrowerAPR",
+                            "BorrowerRate",
+                            "ProsperPrincipalBorrowed",
+                            "LoanStatus",
+                            "LoanOriginalAmount",
+                            "LoanOriginationDate"))
+
+# summary(loans)
+# str(loans)
+```
+
+added label names to listing categories to use as a character variable
+```{r}
+#set theme
+theme_set(theme_minimal(14))
+#create function to rename labels
+rename_listingCat <- function(i_listing) {
+  #return a string with renamed status passed
+  if (i_listing==0){ 'Not Available'}
+  else if (i_listing==1){'Debt consolidation'}
+  else if (i_listing==2){'Home Improvement'}
+  else if (i_listing==3){'Business'}
+  else if (i_listing==4){'Personal Loans'}
+  else if (i_listing==5){'Student Use'}  
+  else if (i_listing==6){'Auto'}
+  else if (i_listing==7){'Other'}
+  else if (i_listing==8){'Baby&Adoption'}
+  else if (i_listing==9){'Boat'}
+  else if (i_listing==10){'Cosmetic'}
+  else if (i_listing==11){'Ring'}
+  else if (i_listing==12){'Green Loans'}
+  else if (i_listing==13){'Household Expenses'}
+  else if (i_listing==14){'Large Purchases'}
+  else if (i_listing==15){'Medical/Dental'}
+  else if (i_listing==16){'Motorcycle'}
+  else if (i_listing==17){'RV'}
+  else if (i_listing==18){'Taxes'}
+  else if (i_listing==19){'Vacation'}
+  else if (i_listing==20){'Wedding'}
+  else {'Other'}
+}
+
+#create a new variable with renamed loan status
+loans$listingCatAlpha <- apply(loans['ListingCategory..numeric.'],1,
+                               rename_listingCat)
+
+loans$TermFactored <- factor(loans$Term)
+loans$ListingCatFactored <- factor(loans$ListingCategory..numeric.)
+cats <-c('0 - Not Available',
+  '1 - Debt Consolidation',
+  '2 - Home Improvement',
+  '3 - Business',
+  '4 - Personal Loan',
+  '5 - Student Use',
+  '6 - Auto',
+  '7- Other',
+  '8 - Baby&Adoption',
+  '9 - Boat',
+  '10 - Cosmetic Procedure',
+  '11 - Engagement Ring',
+  '12 - Green Loans',
+  '13 - Household Expenses',
+  '14 - Large Purchases',
+  '15 - Medical/Dental',
+  '16 - Motorcycle',
+  '17 - RV',
+  '18 - Taxes',
+  '19 - Vacation',
+  '20 - Wedding Loans') 
+
+#summary(loans$listingCatAlpha)
+# str(loans$listingCatAlpha)
+#head(loans$listingCatAlpha)
+# summary(loans)
+
+# create aggregated listing categories for more clarity in plots
+aggregate_listingCat <- function(i_aggr) {
+  #return a string with renamed status passed
+  if (i_aggr==0){ 'Not Available'}
+  else if (i_aggr==1){'Debt consolidation'}
+  else if (i_aggr==2){'Home Improvement'}
+  else if (i_aggr==3){'Business'}
+  else if (i_aggr==4){'Personal Loans'}
+  else if (i_aggr==5){'Student Use'}  
+  else if (i_aggr==6){'Vehicle'}
+  else if (i_aggr==7){'Other'}
+  else if (i_aggr==8){'Family/Household/Fun'}
+  else if (i_aggr==9){'Vehicle'}
+  else if (i_aggr==10){'Family/Household/Fun'}
+  else if (i_aggr==11){'Family/Household/Fun'}
+  else if (i_aggr==12){'Green Loans'}
+  else if (i_aggr==13){'Family/Household/Fun'}
+  else if (i_aggr==14){'Large Purchases'}
+  else if (i_aggr==15){'Medical/Dental'}
+  else if (i_aggr==16){'Vehicle'}
+  else if (i_aggr==17){'Vehicle'}
+  else if (i_aggr==18){'Taxes'}
+  else if (i_aggr==19){'Family/Household/Fun'}
+  else if (i_aggr==20){'Family/Household/Fun'}
+  else {'Other'}
+}
+
+#create a new variable with renamed loan status
+loans$ListingCategoryAggr <- apply(loans['ListingCategory..numeric.'],1,
+                                   aggregate_listingCat)
+```
+
+# Univariate Plots Section
+
+### Plot 1 - Loan origination date
+```{r echo=FALSE, Univariate_Plots_1}
+library(zoo)
+loans$LoanOrigDate <- ymd_hms(loans$LoanOriginationDate)
+loans$LoanOrigMonth <- factor(month(loans$LoanOrigDate, label=TRUE, abbr=TRUE))
+loans$LoanOrigYear <- factor(year(loans$LoanOrigDate))
+
+# construct monthyear variable for sharpe ratio in final plots
+loans$LoanOrigMonthYear <- factor(as.yearmon(loans$LoanOrigDate, "%b %Y"))
+# as.POSIXct(loans$LoanOrigDate, format="%m/%Y")
+# ??yearmon
+
+# summary(loans$LoanOrigDate)
+# summary(loans$LoanOrigMonth)
+# summary(loans$LoanOrigMonthYear)
+# head(loans$LoanOrigMonthYear)
+
+#plot
+bar_year= ggplot(aes(x = LoanOrigYear, color = I('#FF726B'),
+                     fill = I('#56C9CC')), data = loans) +
+  geom_bar() + 
+  ggtitle('Number of Loans by Year')
+bar_month = ggplot(aes(x = LoanOrigMonth,color = I('#FF726B'),
+                       fill = I('#56C9CC')), data = loans) +
+  geom_bar() + 
+  ggtitle('Number of Loans by Month')
+
+grid.arrange(bar_year, bar_month, ncol=1)
+```
+We see a huge dip in the amount of loans in 2008-2009, with the number peaking in 2013-2014 to above the 30k count. This dip in 2008 can be attributed to the regulatory issues that Prosper needed to address.
+
+Looking at the monthly trends, we see loans peaking above 90k in October, December, and January and dipping to ~75K in April. I would have imagined more variability between the months, but perhaps variations come with Loan Category, State, or other categorical variables.
+
+### Plot 2 - Variable distributions with Count Histograms
+To first explore the distributions of variables of interest, I'll draw up quick histograms and box plots.
+
+```{r echo=FALSE, Univariate_Plots_2}
+dat <- data.frame(x = rnorm(100), y = rnorm(100))
+number_ticks <- function(n) {function(limits) pretty(limits, n)}
+
+hist1 = ggplot(aes(x = MonthlyLoanPayment, color = I("#FF726B"), 
+                   fill = I("#56C9CC")), 
+    data = loans, xlim = c(0, 1500), xlab("Monthly Loan Payments")) +
+  geom_histogram(binwidth = 100) + 
+    scale_x_continuous(breaks = number_ticks(10))+ theme_minimal() + 
+    theme(text = element_text(size = 9), 
+          axis.text.x = element_text(angle = 45, size = 8))
+
+hist2 = ggplot(aes(x = ListingCategory..numeric., color = I("#FF726B"), 
+                   fill = I("#56C9CC")), 
+    data = loans, xlim = c(0, 20), xlab("Categories")) +
+  geom_histogram(binwidth = 1) +
+  theme_minimal() + theme(text = element_text(size = 9), 
+          axis.text.x = element_text(angle = 45, size = 8))
+
+hist3 = ggplot(aes(x = LoanOriginalAmount, color = I("#FF726B"),
+                   fill = I("#56C9CC")), 
+    data = loans, xlim = c(0, 20), xlab("Categories")) +
+  geom_histogram(binwidth = 1000) +
+  theme_minimal() + theme(text = element_text(size = 9), 
+          axis.text.x = element_text(angle = 45, size = 8))
+
+hist4 = ggplot(aes(x = ProsperScore, color = I("#FF726B"),
+                   fill = I("#56C9CC")), 
+    data = loans, xlab("Prosper Score")) + geom_histogram(binwidth = 1) +
+  theme_minimal() + theme(text = element_text(size = 9), 
+          axis.text.x = element_text(angle = 45, size = 8))
+
+grid.arrange(hist1, hist2, hist3, hist4, ncol=2)
+```
+
+In the Listing Category histogram, we see a very dispersed count among the different categories. This is important to keep note of for analyzing the categories in later plots. The largest category of loans is #1, or 'Debt Consolidation'
+
+In the Loan Original Amount histogram, we can see that the majority of loans are below the 10000k threshold. An quick judgement would suggest that the typical profile of a Prosper loan is a medium risk, smaller <10k, debt consolidation loans, with monthly payments below a thousand dollars.
+
+Besides 'home improvement' most of the loans are categorized in either arbitrary and/or opaque categories (debt consolidation, other and NA) As a lender on this platform, or for better system intelligence, it would be beneficial if Prosper was more rigorous in requiring lendees to categorize loans, or qualify the debt consolidation loans. This would increase transparency and give the marketplace more accuracy in it's predictions and qualitative data to understand dynamics of the loans.
+I looked into the dynamics of debt consolidation loans and found a explanatory blog post that a [borrower wrote](http://www.moneyunder30.com/prosper-loans-review ), which details how helpful the user found Prosper to be in refinancing his credit card debt, an industry I do find especially predatory. Here is another [beneficial post](https://www.nerdwallet.com/blog/loans/lending-club-prosper-good-options-consolidating-credit-card-debt/) detailing how users benefit from P2P lending platforms. 
+
+
+```{r echo=FALSE, Univariate_Plots_4}
+freq_monthlypayments_term = ggplot(aes(x = MonthlyLoanPayment,
+                                       y = ..count../sum(..count..)),
+                                   data = subset(loans, !is.na(TermFactored)))+
+      geom_freqpoly(aes(color = TermFactored), binwidth = 10) +
+      scale_x_continuous(limits = c(0, 1500), breaks = seq(0,1500,100)) +
+      xlab('Monthly Loan Payments') +
+      ylab('% of loans by term length')+ theme_minimal() + 
+    theme(text = element_text(size = 9), axis.text.x = element_text(angle = 45,
+                                                                    size = 8))
+
+freq_yield_term = ggplot(aes(x = EstimatedEffectiveYield,
+                             y = ..count../sum(..count..)),
+                         data = subset(loans, !is.na(TermFactored))) +
+      geom_freqpoly(aes(color = TermFactored), binwidth = 0.01) +
+      scale_x_continuous(limits = c(0, 0.4), breaks = seq(0,0.4,0.1)) +
+      xlab('Estimated Effective Yield') +
+      ylab('% of loans by term length')+theme_minimal() + 
+    theme(text = element_text(size = 9), axis.text.x = element_text(angle = 45,
+                                                                    size = 8))
+
+grid.arrange(freq_monthlypayments_term, freq_yield_term)
+```
+
+Interesting to note here that the majority of loans have 36 month terms. The percentage of 36 month loans have a spike of ~$175 Monthly loan payments, and 28/29% Effective Yields. Now how to further segment those estimated effective yields?
+
+### Box Plots for categorical data
+  
+```{r echo=FALSE}
+# table(loans$ProsperRating)
+# by(loans$EstimatedEffectiveYield, loans$ProsperRating..numeric., summary)
+
+ratingYieldMeans <- aggregate(EstimatedEffectiveYield ~ ProsperRating..numeric.,
+                              loans, mean)
+
+box5_ratingYield = ggplot(aes(x = as.factor(ProsperRating..numeric.),
+                              y = EstimatedEffectiveYield), 
+                          data = loans)+
+  geom_boxplot(color="#56C9CC")+
+  geom_text(data = ratingYieldMeans,
+            aes(label = round(EstimatedEffectiveYield, 3),
+                y = EstimatedEffectiveYield + 0.01,
+                colour=EstimatedEffectiveYield), size = 3) +
+  scale_colour_continuous(guide = FALSE)+
+  theme(text = element_text(size=9),
+       axis.text.x = element_text(angle = 45, vjust = 1,size = 7, hjust = 1))
+
+
+grid.arrange(box5_ratingYield)
+```
+
+Looking at the means of Effective Yield by ProsperRating, we see a likely negative correlation of the mean Yield by Prosper Rating.
+
+
+```{r, Univariate_Plots_5}
+# by(loans$EstimatedEffectiveYield, loans$ListingCategory..numeric., summary)
+catYieldMeans <- aggregate(EstimatedEffectiveYield ~ listingCatAlpha,
+                           loans, mean)
+catReturnMeans <- aggregate(EstimatedReturn ~ listingCatAlpha,
+                            loans, mean)
+
+box1_categoryYield = ggplot(aes(x = listingCatAlpha,
+                                y = EstimatedEffectiveYield),
+                            data = loans)+geom_boxplot(color="#56C9CC")+
+  geom_text(data = catYieldMeans,
+            aes(label = round(EstimatedEffectiveYield, 3),
+                y = EstimatedEffectiveYield + 0.01,
+                colour=EstimatedEffectiveYield), size = 3)+
+  scale_colour_continuous(guide = FALSE)+
+ theme(text = element_text(size=9),
+       axis.text.x = element_text(angle = 45, vjust = 1,size = 7, hjust = 1))
+
+box2_categoryReturn = ggplot(aes(x = listingCatAlpha, y = EstimatedReturn),
+                         data = loans) + geom_boxplot(color="#56C9CC")+
+  geom_text(data = catReturnMeans, aes(label = round(EstimatedReturn, 3),
+                                       y = EstimatedReturn + 0.01,
+                                       colour=EstimatedReturn), size = 3) +
+   scale_colour_continuous(guide = FALSE)+
+ theme(text = element_text(size=9),
+       axis.text.x = element_text(angle = 45, vjust = 1,size = 7, hjust = 1))
+
+grid.arrange(box1_categoryYield, box2_categoryReturn, ncol =1)
+
+```
+The highest mean of the effective yields by category (excluding loans without a listed category) is found in loans that are for cosmetic procedures with a mean yield of 0.2052 (and a higher median of 0.2254), followed closely by household expenses with a mean of 0.2015.
+
+Interesting to note here that cosmetic loans have a relatively conservative spread in their estimated returns, with very few outliers, and overall positive returns. The spread of their estimated yield is comparatively similar with their IQR being between 14.7% and 25.9%. The largest IQR range seems to be with 'green loans', between 11.3% and 26.4%. This is likely due to the variable nature of 'green loans' and it would be interesting to look further into the actual use of these loans.
+
+Student loans have the lowest estimated effective yields (mean of 10.3% and a median of 10.2%), as yields are prospective returns, this is concurrent with the news about student loan debt in the United States
+
+For reference, here is the definitive difference between yield and return:
+While both terms are often used to describe the performance of an investment, they're not the same thing. Knowing what each measure takes into account and recognizing that each considers different time periods is key.
+
+Return, also referred to as "total return", expresses what an investor has actually earned on an investment during a certain time period in the past. It includes interest, dividends and capital gain (such as an increase in the share price). In other words, return is retrospective, or backward-looking. It describes what an investment has concretely earned.
+
+Yield, on the other hand, is prospective, or forward-looking. Furthermore, it measures the income, such as interest and dividends, that an investment earns and ignores capital gains. This income is taken in the context of a certain time period and then annualized, with the assumption that the interest or dividends will continue to be received at the same rate. Yield is often used to measure bond or debt performance; in most cases, total return will not be the same as the quoted yield due to fluctuations in price.
+# Univariate Analysis
+
+### What is the structure of your dataset?
+```{r}
+dim(loans)
+str(loans)
+```
+
+### What is/are the main feature(s) of interest in your dataset?
+Estimated Return, EstimatedEffectiveYield, Listing Category, ProsperRating, Term, LoanOrigDate
+
+LoanOriginationAmount (however this feature only became a feature of interest after running a correlation heatmap in my multivariate plot section)
+
+### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+From a lender's perspective:
+- MonthlyLoanPayments, InterestRate
+
+From the company's perspective:
+- LoanStatus
+- IncomeRange
+
+From a borrower's perspective:
+- BorrowerState, Occupation, IncomeRange, DebtToIncomeRatio
+
+### Did you create any new variables from existing variables in the dataset?
+
+Yes, I parsed out month and year from the loan origination date variable.
+Pulled out excess returns by listing category (see code later on in multivariate plots section)
+
+### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+
+Yes, see previous comments/notes. 
+
+# Bivariate/Multivariate Plots Section
+
+### Step 1.1 - Run a correlation matrix heatmap
+```{r}
+library(proto)
+library(rjson)
+
+#Only look at the numeric variables in the dataframe 
+#since, run factor variable correlations later
+nums <- sapply(loans, is.numeric)
+loansNum <- loans[nums]
+# str(loansNum)
+# names(loansNum)
+
+#compute the correlation matrix
+cormat <- round(cor(loansNum, method='pearson'), 2)
+# head(cormat)
+
+#create the correlation heatmap
+melted_cormat <- melt(cormat)
+# head(melted_cormat)
+# ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
+#   geom_tile()
+
+# Get lower triangle of the correlation matrix
+  get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+  }
+
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+upper_tri <- get_upper_tri(cormat)
+
+# Melt the correlation matrix
+library(reshape2)
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+# Heatmap
+library(ggplot2)
+ggplot(data = melted_cormat, aes(Var2, Var1, fill = value)) +
+  geom_tile(color = "white") + 
+    scale_fill_gradient2(low = "#FF726B", high = "#56C9CC",
+                         mid = "white", midpoint = 0, 
+        limit = c(-1, 1), space = "Lab", name = "Pearson\nCorrelation") +
+  theme_minimal() + theme(text = element_text(size = 9),
+                          axis.text.x = element_text(angle = 45, vjust = 1, 
+        size = 9, hjust = 1)) + coord_fixed() 
+```
+
+After running a correlation matrix heatmap, you can visualize the strength of positive and negative correlations between numerical variables. 
+
+It is interesting to note a strong negative correlation between BorrowerRate and LoanOriginationAmount, and a positive correlation between MonthlyLoanPayment and LoanOriginationAmount. Does this make sense? Yes, but dissapointing that there arent stronger correlative patterns from ProsperRating and zero correlations with ProsperScore.
+
+The variables with the most information gain, I would deem to be BorrowerRate, and LoanOriginalAmount as they both have the most occurences and mix of both negative and positive correlations with other variables. However, this matrix seems very limited, and my syntax doesn't handle pairwise completion for NA variables. 
+
+Perhaps I need to tune parameters of the heat map to see correlations from a different perspective.
+
+### Step 1.2 - Reshape correlation matrix
+```{r}
+nums <- sapply(loans, is.numeric)
+loansNum <- loans[nums]
+# str(loansNum)
+# names(loansNum)
+
+col <- colorRampPalette(c("#FF726B","white","#56C9CC"))
+wb <- c("white", "black")
+
+df<- data.frame((sapply(loansNum,c)))
+
+M <-cor(df, use="pairwise.complete.obs")
+p = M
+p[is.na(M)]=0.2 
+p[is.na(M)==F]=0
+M[is.na(M)]=0
+par(cex=0.7)
+corrplot(M, order = "hclust",type="lower",
+                          addrect = 2, col = col(10),
+         tl.cex= 0.9,  addCoef.col="dark grey", tl.col="black",
+         cl.cex = 1/par("cex"), addCoefasPercent = TRUE )
+
+
+cor.test(loans$ProsperScore, loans$EstimatedEffectiveYield, method= 'pearson')
+```
+Ah! That is better, now I can see the strength of correlations between ProsperScore/ProsperRating and EstimatedEffectiveYield/BorrowerAPR/BorrowerRate are more pronounced. This makes more sense, a borrower with a lower rating gets a higher rate.
+
+When I run a correlation matrix that is able to cluster order the correlations, I can detect patterns with more clarity. With my second heatmap correlation matrix we still see the correlation variance for LoanOriginalAmount with negative correlations of -0.33, -0.32, -0.33 with EstimatedEffectiveYield, BorrowerAPR, BorrowerRate and 0.34, 0.43, 0.27 with CreditScore, ProsperRating, and ProsperScore respectively. The negative correlations would indicate to me lower loan amounts get lower returns/lower rates because of less risk exposure.
+
+It's interesting to note that there is a relatively high correlation between ListingNumber (a seemingly arbitrary key number) and estimated return. Could this be related to Benford's first digit law? I'm not particularly interested in pursuing this further, but just a thought! 
+
+The positive correlations would indicate to me a possible cap on the LoanOriginalAmount and Prosper Risk scores (credit, rating, and score) - the temporal nature of these loans on risk exposure is a category I'd like to explore further with a temporal/categorical crosssection.
+
+### Step 2 - Drill deeper into correlated variables with scatterplots
+
+```{r echo=FALSE, Bivariate_Plots_1}
+
+loansCatNARemoved <- subset(loans, loans$listingCatAlpha!= c('Not Available'))
+
+scatter1 = ggplot(aes(x = LoanOriginalAmount, y = EstimatedEffectiveYield,
+                      color = ListingCategoryAggr),data = loansCatNARemoved) +
+  geom_jitter(alpha = 0.2, position = position_jitter(h = 0)) +
+   scale_colour_discrete(guide = FALSE)
+
+scatter2 = ggplot(aes(x = ProsperScore, y = EstimatedEffectiveYield,
+                      color = ListingCategoryAggr), data = loansCatNARemoved) +
+  geom_jitter(alpha = 0.2, position = position_jitter(h = 0)) +
+   scale_colour_discrete(guide = FALSE)
+
+scatter3 = ggplot(aes(x = LoanOriginalAmount, y = EstimatedReturn,
+                      color = ListingCategoryAggr), data = loansCatNARemoved) +
+  geom_jitter(alpha = 0.2, position = position_jitter(h = 0)) +
+   scale_colour_discrete(guide = FALSE)
+
+scatter4 = ggplot(aes(x = ProsperScore, y = EstimatedReturn,
+                      color = ListingCategoryAggr), data = loansCatNARemoved) +
+  geom_jitter(alpha = 0.2, position = position_jitter(h = 0)) + 
+guides(colour = guide_legend(ncol = 3,
+                             override.aes = list(size=2,alpha = 1),
+                             label.theme = element_text(size = 6,
+                                                        angle = 0))) + 
+  theme(legend.position=c(.5, .1))
+
+grid.arrange(scatter1, scatter2, scatter3, scatter4, ncol=2)
+# 
+
+cor.test(loans$LoanOriginalAmount, loans$EstimatedEffectiveYield,
+         method= 'pearson')
+cor.test(loans$ProsperScore, loans$EstimatedEffectiveYield, method= 'pearson')
+cor.test(loans$LoanOriginalAmount, loans$EstimatedReturn, method= 'pearson')
+cor.test(loans$ProsperScore, loans$EstimatedReturn, method= 'pearson')
+
+```
+
+Took out the NA variables from the data to get a clearer picture of all the different categories.
+The first Estimated Effective Yield and Loan Original Amount scatterplot, shows the -0.33 correlation. 
+The Estimated Effective Yield and Prosper Score scatterplot, shows the -0.63 correlation.
+The Estimated Return and Loan Original Amount scatterplot, shows the -0.29 correlation.
+The Estimated Return and Prosper Score scatterplot, shows the -0.38 correlation.
+
+There seems to be smaller inner quartile ranges (IQRs) for estimated returns by Prosper Score than IQRs for Estimated Effective Yield (a cursory judgement of IQRs was enabled by using an alpha of 0.20 to indicate density of values), even though the correlation is stronger, as indicated by a steeper negative slope. 
+
+
+### Step 3 - Categorical temporal histogram
+
+```{r, Bivariate_Plots_2}
+bar_year_category = ggplot(aes(x = LoanOrigYear, fill = listingCatAlpha),
+                           data = loans) +
+  geom_bar() + ggtitle('Category of Loans by Year') +
+  theme_minimal() + theme(text = element_text(size = 10),
+                          axis.text.x = element_text(angle = 45, vjust = 1,
+                                                     size = 8, hjust = 1)) +
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,
+                             label.theme =element_text(size = 8,
+                                                       angle = 0)))+
+  coord_trans()
+  
+#scale_colour_discrete(guide = FALSE)
+#  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5)) 
+
+bar_month_category = ggplot(aes(x = LoanOrigMonth, fill = listingCatAlpha),
+                            data = loans) +
+  geom_bar() + 
+  ggtitle('Category of Loans by Month') +
+  theme_minimal() + theme(text = element_text(size = 10),
+                          axis.text.x = element_text(angle = 45, vjust = 1,
+                                                     size = 8, hjust = 1)) +
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,
+                             label.theme = element_text(size = 8,
+                                                        angle = 0)))+
+  coord_trans()
+
+grid.arrange(bar_year_category, bar_month_category, ncol=1)
+```
+From this graph we can see that there is cyclical variation of all categories of loans EXCEPT for Auto, Baby, Boat, and Business loans. However, the representation may be more pronounced as there are fewer cases of business and auto loans to visually see the variation. 
+
+```{r}
+bar_month_cat_sqrt = ggplot(aes(x = LoanOrigMonth,color= I('black'),
+                                fill = listingCatAlpha), data = loans) +
+  scale_y_sqrt()+
+  geom_bar() + 
+  ggtitle('Category of Loans by Month') +
+  theme_minimal() + theme(text = element_text(size = 10),
+                          axis.text.x = element_text(angle = 45, vjust = 1,
+                                                     size = 8, hjust = 1)) +
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,
+                             label.theme = element_text(size = 8,
+                                                        angle = 0))) +
+  coord_trans()
+
+grid.arrange(bar_month_cat_sqrt, ncol=1)
+```
+When the Y axis (count) is transformed by squaring, there still doesn't seem to be much cyclical variation for Auto, Baby, Boat, and Business loans.
+
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+
+It was interesting to note the information gain from LoanOriginalAmount.
+
+### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)? What was the strongest relationship you found?
+
+Please see notes above under plots.
+
+I came to this section with thoughts about which variables that may have interesting relationships: RevolvingCreditBalance, IncomeRange, BankcardUtilization 
+I.e. would a low bankcard utilization indicate low trust in banks? I'm curious about whether people's relationships with their banks affect their prospensity to use P2P lending. And would this be correlated with IncomeRanges?
+
+From the correlation heatmap matrix, I could quickly see that there wasnt a correlation between StatedMonthlyIncome and BankcardUtilization. 
+
+I also did not find strong correlations between DebToIncomeRatio and CurrentDelinquencies, two variables I would expect to be closely linked. 
+
+# Multivariate Plots Section
+
+```{r echo=FALSE, Multivariate_Plots_1}
+library(dplyr)
+library(tseries)
+# chain functions together. note that instead of the treasury bills interest
+# rate to compute the excess return, for data loading simplicity, we are using
+# the overall mean of loans to sit in place of t bills interest rate
+
+# get mean monthly estimated return by category
+loansByDate_Cat1 <-loans %>%
+  filter(!is.na(EstimatedReturn))%>%
+  group_by(LoanOrigMonthYear, listingCatAlpha) %>%
+  summarise(meanCatReturn = mean(EstimatedReturn),
+            sdReturn = sd(EstimatedReturn, na.rm=TRUE),
+            catN = n()) %>%
+  ungroup()%>%
+  arrange(LoanOrigMonthYear)
+
+# get mean monthly estimated return
+loansByDate_Cat2 <-loans %>%
+  filter(!is.na(EstimatedReturn))%>%
+  group_by(LoanOrigMonthYear) %>%
+  summarise(tbillsInterest = mean(EstimatedReturn),
+            n = n())%>%
+  arrange(LoanOrigMonthYear)
+
+loansByDate_Cat3 <- full_join(loansByDate_Cat1, loansByDate_Cat2,
+                              by = "LoanOrigMonthYear")
+
+loansByDate_Cat <- loansByDate_Cat3%>%
+  mutate(excessReturn = meanCatReturn-tbillsInterest)
+
+loansByRollingSharpe <- loansByDate_Cat%>%
+  mutate(sharpeR = excessReturn/sdReturn)
+
+loansCatExcessR <- loansByDate_Cat%>%
+  group_by(listingCatAlpha) %>%
+  summarise(meanExcess = as.numeric(mean(excessReturn)),
+            sdReturn =as.numeric(mean(sdReturn)),
+            n = n())
+# use mean and std of all loans(Prosp20 instead of SP500) excess returns as the
+# market excess return and risk (standard deviation) and add to the
+# loansCatExcessR as index variable
+Prosp20 = c("Prosp20", mean(loansByDate_Cat$excessReturn),
+            sd(loansByDate_Cat$excessReturn), 1 )
+loansCatExcessR = rbind(loansCatExcessR,Prosp20)
+
+loansCatExcessR <- loansCatExcessR%>%
+  mutate(sharpeR = as.numeric(meanExcess)/as.numeric(sdReturn))
+
+line_excessR_cat = ggplot(aes(x = as.numeric(LoanOrigMonthYear),
+                              y = excessReturn, color= listingCatAlpha,
+                              fill = listingCatAlpha, alpha = 1/5),
+                          data = loansByDate_Cat) + geom_line() + 
+  ggtitle('Loan Category excess returns by Month')+ xlab('Origination Month')+
+  ylab('Excess Return')+scale_x_continuous(limits = c(37, 96),
+                                           breaks = seq(37,96,12))+
+   scale_alpha(guide = FALSE)+
+  theme_minimal()+
+  guides(col = guide_legend(nrow = 10, keywidth = 0.5,
+                            keyheight = 0.5,
+                            label.theme = element_text(size = 6, angle = 0)))+
+    theme(text = element_text(size = 9),
+          axis.text.x = element_text(angle = 45, vjust = 1,
+                                     size = 8, hjust = 1))
+
+grid.arrange(line_excessR_cat)
+```
+
+mean/median prosperscore by listing category
+
+```{r echo=FALSE, Multivariate_Plots_ListingCatAggr}
+library(dplyr)
+library(tseries)
+
+# get mean monthly estimated return by categories AGGREGATED
+loansByDate_CatAggr1 <-loans %>%
+  filter(!is.na(EstimatedReturn))%>%
+  group_by(LoanOrigMonthYear, ListingCategoryAggr) %>%
+  summarise(meanCatAggrReturn = mean(EstimatedReturn),
+            sdAggrReturn = sd(EstimatedReturn),
+            catAggrN = n()) %>%
+  ungroup()%>%
+  arrange(LoanOrigMonthYear)
+
+# get mean monthly estimated return
+loansByDate_CatAggr2 <-loans %>%
+  filter(!is.na(EstimatedReturn))%>%
+  group_by(LoanOrigMonthYear) %>%
+  summarise(tbillsInterest = mean(EstimatedReturn),
+            n = n())%>%
+  arrange(LoanOrigMonthYear)
+
+loansByDate_CatAggr3 <- full_join(loansByDate_CatAggr1,
+                                  loansByDate_CatAggr2, by = "LoanOrigMonthYear")
+
+loansByDate_CatAggr <- loansByDate_CatAggr3%>%
+  mutate(excessAggrReturn = meanCatAggrReturn-tbillsInterest)
+
+loansByRollingSharpeAggr <- loansByDate_CatAggr%>%
+  mutate(sharpeRAggr = excessAggrReturn/sdAggrReturn)
+
+loansCatExcessRAggr <- loansByDate_CatAggr%>%
+  group_by(ListingCategoryAggr) %>%
+  summarise(meanAggrExcess = as.numeric(mean(excessAggrReturn)),
+            sdAggrReturn = as.numeric(mean(sdAggrReturn)),
+            nAggr = n())
+# use mean and std of all loans(Prosp20 instead of SP500) excess returns as the
+# market excess return and risk (standard deviation) and add to the 
+# loansCatExcessR as index variable
+Prosp20Aggr = c("Prosp20", mean(loansByDate_Cat$excessReturn),
+            sd(loansByDate_Cat$excessReturn), 1 )
+loansCatExcessRAggr = rbind(loansCatExcessRAggr,Prosp20Aggr)
+
+loansCatExcessRAggr <- loansCatExcessRAggr%>%
+  mutate(sharpeRAggr = as.numeric(meanAggrExcess)/as.numeric(sdAggrReturn))
+
+line_excessR_catAggr = ggplot(aes(x = as.numeric(LoanOrigMonthYear),
+                                  y = excessAggrReturn,
+                                  color= ListingCategoryAggr,
+                                  fill = ListingCategoryAggr, alpha = 1/5),
+                              data = loansByDate_CatAggr) + geom_line() + 
+  ggtitle('Loan (Aggregated) Category excess returns by Month')+ 
+  xlab('Origination Month')+ ylab('Excess Return')+
+  scale_x_continuous(limits = c(37, 96), breaks = seq(37,96,12))+
+   scale_alpha(guide = FALSE)+
+  theme_minimal()+
+  guides(col = guide_legend(nrow = 10, keywidth = 0.5,
+                            keyheight = 0.5,
+                            label.theme = element_text(size = 6, angle = 0)))+
+  scale_alpha(guide = 'none') + 
+    theme(text = element_text(size = 9),
+          axis.text.x = element_text(angle = 45, vjust = 1,
+                                     size = 8, hjust = 1))
+
+grid.arrange(line_excessR_catAggr)
+```
+
+When we aggregate the category variables we can see the categories a little more clearly. The huge spread of NA loans makes the case for loans to be categorized as earlier stated in my initial analysis of the opacity of the loans. 
+
+The huge variation in [green loans](https://www.prosper.com/loans/loan-types/green-loans) from 2010-2012 is interesting to note. These are loans for home improvement and green energy financing. Dipping below 4% and peaking above 2% three different times. This huge fluctuation is concurrent with the whole renewable energy market volatility.
+
+loan original amount
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+
+In the loan category excess returns by month, there seems to be quite a lot of volatility across the categories as a whole, but perhaps need to filter by category to see interesting patterns.
+Please see Plot 2 of Final Plots and Summary for further analysis.
+
+### Were there any interesting or surprising interactions between features?
+We see that the NA loans have the highest variability in returns which is understandable considering that it is probably a huge random assortment bucket of loans. 
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
+
+The limitations of my model, as outlined in the final analysis section, is that the Sharpe ratio is in this case drawn endogenously, benchmarking against the average returns of the Prosper Market. For future work, I would like to benchmark against the SP500 and other indices. This sort of work would be useful in selling P2P lending as a platform to institutional lenders. 
+
+The [Beta and Covariance](http://www.r-bloggers.com/investment-portfolio-analysis-with-r-language/) between the listing categories would be helpful to compute the max Sharpe ratio of a portfolio. This could serve as a dashboard/widget as a helpful product the platform could provide/sell to lenders (both institutional and regular).
+
+------
+
+# Final Plots and Summary
+Draw comparisons. Identify trends. Engage a wide audience. Explain a complicated finding. Clarify a gap between perception and reality. Enable the reader to digest large amounts of information.
+
+### Plot One
+```{r echo=FALSE, Plot_One}
+cor.test(loans$ProsperScore, loans$EstimatedEffectiveYield, method= 'pearson')
+cor.test(loans$ProsperScore, loans$EstimatedReturn, method= 'pearson')
+
+plot1_1 = ggplot(aes(x = ProsperScore, y = EstimatedEffectiveYield,
+                      color = ListingCategoryAggr), data = loansCatNARemoved) +
+  geom_jitter(alpha = 0.2, position = position_jitter(h = 0)) +
+   scale_colour_discrete(guide = FALSE)
+
+plot1_2 = ggplot(aes(x = ProsperScore, y = EstimatedReturn,
+                      color = ListingCategoryAggr), data = loansCatNARemoved) +
+  geom_jitter(alpha = 0.2, position = position_jitter(h = 0)) + 
+guides(colour = guide_legend(ncol = 2,
+                             override.aes = list(size=2,alpha = 1),
+                             label.theme = element_text(size = 6,
+                                                        angle = 0)))
+
+grid.arrange(plot1_1,plot1_2, ncol=1)
+
+```
+
+### Description One
+The correlation matrix was able to effectively give a snapshot overview of some of the most important relationships amongst the numerical variables.
+
+I chose to highlight the ProsperScore scatterplots measured against Estimate Effective Yield and Estimated Returns. These relationships had some of the strongest negative correlations (-0.63 and -0.38 respectively)
+
+I am surprised at the larger spread for (future) estimated yields, rather than (retrospective) estimated returns which at first indicated to me that the Prosper Score was good at predicting estimated returns, but I realized Prosper Score may be a variable that was derived from estimated returns (and not the other way around). 
+
+Upon second look at the prosper score scatter charts, the large spread in the estimated yields chart makes sense, as a lot of these estimates are closer to 0.3, really demonstrating the fallibility of human optimism in future yields vs. the reality of returns!
+
+### Plot Two
+
+```{r echo=FALSE, Plot_Two}
+point_excessR_cat = ggplot(aes(x = as.numeric(meanExcess),
+                               y = as.numeric(sdReturn),
+                               color = listingCatAlpha, alpha = 1/3),
+                           data = loansCatExcessR,
+                           label=rownames(loansCatExcessR)) +
+  scale_x_continuous(limits = c(-0.003, 0.006))+ylim(0.015, 0.06)+
+  scale_colour_discrete(guide = FALSE)+
+  geom_point() +geom_text(aes(label=listingCatAlpha),
+                          hjust=0, vjust=0, size =3, angle = 30) +
+  theme_minimal()+
+  ggtitle('Category Excess Returns (by Mean and SD)')+
+  xlab('Mean Excess Returns')+ ylab('SD of Excess Returns')+
+  scale_alpha(guide = 'none')+ theme_minimal() + 
+  theme(text = element_text(size = 9),
+        axis.text.x = element_text(angle = 45, vjust = 1, size = 8, hjust = 1))
+
+line_sharpe_cat = ggplot(aes(x = as.numeric(LoanOrigMonthYear), y = sharpeR, 
+                             color= listingCatAlpha, fill = listingCatAlpha, 
+                             alpha = 1/10),
+                         data = loansByRollingSharpe) + geom_line() + 
+  ggtitle('Category Sharpe by Month')+ xlab('Origination Month')+
+  ylab('Sharpe Ratio')+ theme_minimal()+
+  scale_x_continuous(limits = c(35, 95), breaks = seq(35,95,12))+
+  guides(col = guide_legend(nrow = 10, keywidth = 0.5,
+                            keyheight = 0.5,
+                            label.theme = element_text(size = 6, angle = 0)))+ 
+  scale_alpha(guide = 'none') + 
+  theme(text = element_text(size = 9),
+        axis.text.x = element_text(angle = 45, vjust = 1, size = 8, hjust = 1))
+
+
+grid.arrange(point_excessR_cat, line_sharpe_cat,  ncol=1)
+summary(loansCatExcessR)
+# table(loansCatExcessR)
+# head(loansCatExcessR)
+```
+
+
+### Description Two
+My second plots show first the excess returns be category with the mean of the *endogenous* Sharpe ratio sitting at 1%. The next plot shows the moving averages of the excess returns across listing categories (the Estimated Returns, grouped by listing category and effectively binned by month of the year).
+
+We can see a huge gap in loans representative of the drop in loans from 2008-2009, but steady variation across many categories. This plot could be further refined to filter by large standard deviations. 
+
+In the Category Excess Returns plot, we can see that household, student use, wedding, medical/dental, other and loans without a category listed have the highest excess returns. 
+
+For portfolio optimization perspective a rolling Sharpe Ratios were plotted on a month by month basis for each listing category. The variance in the Student Loans brought the Sharpe Ratio down to zero, and they are deemed to not be a good asset due to risk. Cosmetic loans again seem to be a good choice of asset class, with the highest Sharpe ratios.
+
+Also, for follow on work, we can pull historical treasure bill data and index the Sharpe ratios against the mean and std of the SP500 instead of the Prosper loans total. This will determine risk exposure indexed against the market, and extend portfolio optimization exogenously beyond just the Prosper Loan market.
+
+### Plot Three
+```{r echo=FALSE, Plot_Three}
+studentLoans <- subset(loans, listingCatAlpha == "Student Use")
+studentLoansByMonth <- subset(loansByDate_Cat,
+                              listingCatAlpha == "Student Use")
+
+bar_year_student = ggplot(aes(x = LoanOrigYear,color= I('#FF726B'),
+                              fill=I("#56C9CC")), data = studentLoans) +
+  geom_bar() + 
+  ggtitle('Count of Student Use Loans by Year')
+
+point_student = ggplot(aes(x = as.numeric(LoanOrigMonthYear), y = excessReturn,
+                           alpha = 1/5), data = studentLoansByMonth) +
+  geom_point() + scale_alpha(guide = 'none')+ 
+  ggtitle('Student Use excess returns by Month')+ xlab('Origination Month')+
+  ylab('Excess Return')
+
+grid.arrange(bar_year_student, point_student)
+#+ geom_line(stat = 'summary', fun.y = mean)\
+# bar_month = ggplot(aes(x = LoanOrigMonth,color = I('#FF726B'),
+```
+
+### Description Three
+I wanted to drill deeper into the risk of student loans.In light of recent news about 40% of students defaulting on 200 billion of government loans (include link). I want to see if there is a visual pattern that would indicate or add any predictive value to an imbalanced situation like this.
+
+I want to highlight my third plot, a count histogram of Student Use loans, where I discovered that these loans actually stopped in 2010. This explains the lower yields than returns for student loans noted in my initial univariate box plots Perhaps this is due to platform regulatory issues, or recording practices, or poor performance of loans. 
+
+I further chose to investigate the historical performance of the loans as a possible causal mechanism for why Student Use loans stopped in 2010. Excess returns were at an all time high right before they stopped, so we can discount poor returns as a causal mechanism for Student Use loans stopping in 2010.
+
+------
+
+# Reflection
+The dataset contained records of almost 114,000 loans from Nov 2005 - March 2014. Over the course of those years, Prosper made close to $1 trillion dollars in loans.
+
+Running through the process, univariate to bivariate to multivariate analysis, I actually found it really useful to work backwards from a correlation heatmap matrix (a multivariate plot). I will definitely use this tool for future analyses where I am working with data with a lot of variables.
+
+### Where did I run into difficulties in the analysis?
+
+I struggled in trying to cut through the noise of all initial 81 variables to select variables that contained the most 'information'. I ran a cursory/manual parse to cut the full set down to 31 variables, and then further cut the set down to 21 numerical values to run my correlation matrix.
+
+I struggled with my initial correlation heatmap, using a very manual tutorial that did not populate the matrix very effectively.
+
+I also struggled in reshaping my dataframes with dplyr in a way to compute sharpe ratios and other risk factors. ie running multiple summarise() functions on different grouping levels of the data proved to be a bit more convoluted than I anticipated, but perhaps there is a shorter way (input appreciated!)
+
+### Where did I find successes?
+
+I found eventual success in installing and running the corrplot package to construct a corrplot matrix that clustered the R values of my numerical variables.
+
+I also found eventual success playing around with mutate() and fulljoin() functions to prep the data to compute Sharpe Ratios.
+
+### How could the analysis be enriched in future work (e.g. additional data and analyses)?
+Perhaps I may be able to pull out explanatory factors from all 81 variables with a PCA classifier, or other machine learning techniques taught in Project 5 of this course.
+
+Perhaps we can continue exploring patterns with categorical data.
+http://www.r-statistics.com/2010/04/correlation-scatter-plot-matrix-for-ordered-categorical-data/
+
+As well, I'd like to run an analysis and visualization of the listing category Sharpe Ratios, and train good portfolio management classifier.
+
+In light of recent news about 40% of students are not paying $200 billion worth of [government loans](http://fortune.com/2016/04/07/student-loan-repayment/), I want to see if there are more visual patterns I can explore that would indicate or add any predictive value to a tenuous situation like this or combine it with exogenous market variables to assess risk in student loan lending on Prosper. However, the Student use of Prosper loans seems to stop in 2010, so an exploration of why there are no more student use listings after 2010 is necessary.
+
